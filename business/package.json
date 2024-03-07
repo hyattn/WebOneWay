@@ -10,5 +10,9 @@
   },
   "devDependencies": {
     "vite": "^5.1.4"
+  },
+  "dependencies": {
+    "three": "^0.162.0",
+    "three-pathfinding": "^1.2.0"
   }
 }

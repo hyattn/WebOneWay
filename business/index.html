@@ -3,112 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <title>Aframe with Three.js in AR</title>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://aframe.io/releases/1.1.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 </head>
 <body>
-    <a-scene 
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: false;"
-    >
-        <!-- Camera -->
-        <a-entity 
-            id="camera"
-            camera 
-            look-controls
-            position="0 0 0"
-        ></a-entity>
+        
+<a-scene 
+    embedded
+    arjs="patternRatio: 0.80; debugUIEnabled: false;"
+>
 
-        <!-- Lights -->
-        <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
-        <a-light type="directional" color="#ffffff" intensity="0.8" position="20 30 0" castShadow="true"></a-light>
+<a-assets>
+    <a-asset-item id="scene" src="./dist/SimpleRoom.gltf"></a-asset-item>
+    <a-asset-item id="navmesh" src="./dist/NavMesh.gltf"></a-asset-item>
+</a-assets>
 
-        <!-- 3D Model -->
-        <a-entity 
-            gltf-model="./dist/HospitalModelAddRooms.gltf"
-            class="clickable"
-        ></a-entity>
+<a-entity id="modelContainer" position="0 0 0">
+    <a-entity
+        gltf-model="#scene">
+    </a-entity>
+</a-entity>
 
-        <!-- Pathfinding helper -->
-        <a-entity 
-            pathfinding-helper
-        ></a-entity>
+<!-- Lights -->
+<a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
+<a-light type="directional" color="#ffffff" intensity="0.8" position="20 30 0" castshadow="true"></a-light>
 
-    </a-scene>
+<!-- Pathfinding helper -->
+<a-entity 
+    pathfinding-helper
+    navmesh="#navmesh"
+    move-camera
+></a-entity> 
 
-    <script>
-        AFRAME.registerComponent('pathfinding-helper', {
-            init: function () {
-                const scene = this.el.sceneEl.object3D;
-                const loader = new THREE.GLTFLoader();
-                const pathfinding = new THREE.Pathfinding();
-                let navmesh;
+</a-scene>
 
-                loader.load('./dist/HospitalModelAddRooms.NavMeshgltf.gltf', function (gltf) {
-                    scene.add(gltf.scene);
-                    gltf.scene.traverse((node) => {
-                        if (!navmesh && node.isMesh) {
-                            navmesh = node;
-                            const geometry = node.geometry;
-                            pathfinding.setZoneData('level1', THREE.Pathfinding.createZone(geometry));
+<script>
+AFRAME.registerComponent('pathfinding-helper', {
+    schema: {
+        navmesh: { type: 'selector' }
+    },
+    init: function () {
+        console.log( "Pathfinding helper component initialized.");
 
-                            // Start point (for fixed navigation)
-                            const startPoint = new THREE.Vector3(0, 0, 0);
-                            // End point (for fixed navigation)
-                            const endPoint = new THREE.Vector3(5, 0, 5);
-                            const groupID = pathfinding.getGroup('level1', startPoint);
-                            const closest = pathfinding.getClosestNode(startPoint, 'level1', groupID);
-                            const navpath = pathfinding.findPath(closest.centroid, endPoint, 'level1', groupID);
-                            if (navpath) {
-                                const pathfindingHelper = document.querySelector('[pathfinding-helper]');
-                                pathfindingHelper.setAttribute('draw-path', { path: navpath });
-                            }
-                        }
-                    });
-                });
+        const scene = this.el.object3D;
+        const pathfinding = new THREE.Pathfinding();
+        let navmesh;
 
-                // Commented out click event listener
-                /*this.el.sceneEl.addEventListener('click', (event) => {
-                    const intersects = event.detail.intersectedEls;
-                    if (intersects.length > 0) {
-                        const targetPosition = intersects[0].object3D.position;
-                        const cameraPosition = document.getElementById('camera').object3D.position;
-                        const groupID = pathfinding.getGroup('level1', cameraPosition);
-                        const closest = pathfinding.getClosestNode(cameraPosition, 'level1', groupID);
-                        const navpath = pathfinding.findPath(closest.centroid, targetPosition, 'level1', groupID);
-                        if (navpath) {
-                            const pathfindingHelper = document.querySelector('[pathfinding-helper]');
-                            pathfindingHelper.setAttribute('draw-path', {
-                                playerPosition: cameraPosition,
-                                targetPosition: targetPosition,
-                                path: navpath
-                            });
-                        }
+        const model = document.querySelector(this.data.navmesh);
+        const loader = new THREE.GLTFLoader();
+
+        loader.parse(model, '', (gltf) => {
+            scene.add(gltf.scene);
+            gltf.scene.traverse((node) => {
+                if (!navmesh && node.isMesh) {
+                    navmesh = node;
+                    const geometry = node.geometry;
+                    pathfinding.setZoneData('level1', THREE.Pathfinding.createZone(geometry));
+
+                    // Start point (for fixed navigation)
+                    const startPoint = new THREE.Vector3(0, 0, 0);
+                    // End point (for fixed navigation)
+                    const endPoint = new THREE.Vector3(0, 1.5, -4);
+                    const groupID = pathfinding.getGroup('level1', startPoint);
+                    const closest = pathfinding.getClosestNode(startPoint, 'level1', groupID);
+                    const navpath = pathfinding.findPath(closest.centroid, endPoint, 'level1', groupID);
+                    if (navpath) {
+                        const pathfindingHelper = document.querySelector('[pathfinding-helper]');
+                        pathfindingHelper.setAttribute('draw-path', { path: navpath });
                     }
-                });*/
-            }
+                }
+            });
         });
+    }
+});
 
-        AFRAME.registerComponent('draw-path', {
-            schema: {
-                path: { type: 'array' }
-            },
-            init: function () {
-                const scene = this.el.sceneEl.object3D;
-                const lineGeometry = new THREE.BufferGeometry();
-                const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
-                const line = new THREE.Line(lineGeometry, lineMaterial);
-                scene.add(line);
+AFRAME.registerComponent('draw-path', {
+    schema: {
+        path: { type: 'array' }
+    },
+    init: function () {
+        console.log("Draw path component initialized.");
 
-                this.update();
-            },
-            update: function () {
-                const navpath = this.data.path;
-                const points = navpath.map(node => new THREE.Vector3(node.x, node.y, node.z));
-                const geometry = this.el.getObject3D('mesh').geometry;
-                geometry.setFromPoints(points);
+        const scene = this.el.object3D;
+        const arrowGroup = new THREE.Group();
+        scene.add(arrowGroup);
+
+        this.arrowMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+        this.arrowGeometry = new THREE.ConeGeometry(0.05, 0.1, 10);
+
+        this.update();
+    },
+    update: function () {
+        console.log("Updating path visualization.");
+
+        const navpath = this.data.path;
+        const arrowGroup = this.el.object3D;
+        arrowGroup.clear();
+
+        for (let i = 0; i < navpath.length - 1; i++) {
+            const startPoint = new THREE.Vector3(navpath[i].x, navpath[i].y, navpath[i].z);
+            const endPoint = new THREE.Vector3(navpath[i + 1].x, navpath[i + 1].y, navpath[i + 1].z);
+
+            const direction = new THREE.Vector3().subVectors(endPoint, startPoint);
+            const arrow = new THREE.Mesh(this.arrowGeometry, this.arrowMaterial);
+
+            const arrowLength = direction.length() - 0.2; // Adjust the length of the arrow
+            arrow.position.copy(startPoint);
+            arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+            arrow.scale.set(1, arrowLength, 1);
+
+            arrowGroup.add(arrow);
+        }
+    }
+});
+
+AFRAME.registerComponent('move-camera', {
+    init: function () {
+        console.log("Move camera component initialized.");
+
+        // Track initial camera position
+        let initialCameraPosition = null;
+
+        // Listen for device orientation changes
+        window.addEventListener('deviceorientation', (event) => {
+            if (initialCameraPosition === null) {
+                initialCameraPosition = new THREE.Vector3();
+                initialCameraPosition.copy(this.el.sceneEl.camera.el.object3D.position);
             }
+
+            // Calculate camera movement
+            const dx = event.gamma / 90;
+            const dy = event.beta / 90;
+            const dz = event.alpha / 90;
+
+            // Update camera position
+            const cameraPosition = new THREE.Vector3(
+                initialCameraPosition.x + dx,
+                initialCameraPosition.y + dy,
+                initialCameraPosition.z + dz
+            );
+            this.el.sceneEl.camera.el.setAttribute('position', cameraPosition);
+            console.log("Camera position updated:", cameraPosition);
         });
-    </script>
+    }
+});
+</script>
+   
 </body>
 </html>
