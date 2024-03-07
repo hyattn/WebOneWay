@@ -10,7 +10,7 @@
         
 <a-scene 
     embedded
-    arjs="patternRatio: 0.80; debugUIEnabled: false;"
+    arjs="sourceType: webcam; patternRatio: 0.80; debugUIEnabled: false;"
 >
 
 <a-assets>
@@ -18,10 +18,13 @@
     <a-asset-item id="navmesh" src="./dist/NavMesh.gltf"></a-asset-item>
 </a-assets>
 
-<a-entity id="modelContainer" position="0 0 0">
-    <a-entity
-        gltf-model="#scene">
-    </a-entity>
+<!-- カメラ -->
+<a-entity camera></a-entity>
+
+<!-- ３Dモデル -->
+<a-entity
+    gltf-model="#scene"
+    position="0 0 0">
 </a-entity>
 
 <!-- Lights -->
@@ -32,122 +35,11 @@
 <a-entity 
     pathfinding-helper
     navmesh="#navmesh"
-    move-camera
 ></a-entity> 
 
 </a-scene>
 
-<script>
-AFRAME.registerComponent('pathfinding-helper', {
-    schema: {
-        navmesh: { type: 'selector' }
-    },
-    init: function () {
-        console.log( "Pathfinding helper component initialized.");
-
-        const scene = this.el.object3D;
-        const pathfinding = new THREE.Pathfinding();
-        let navmesh;
-
-        const model = document.querySelector(this.data.navmesh);
-        const loader = new THREE.GLTFLoader();
-
-        loader.parse(model, '', (gltf) => {
-            scene.add(gltf.scene);
-            gltf.scene.traverse((node) => {
-                if (!navmesh && node.isMesh) {
-                    navmesh = node;
-                    const geometry = node.geometry;
-                    pathfinding.setZoneData('level1', THREE.Pathfinding.createZone(geometry));
-
-                    // Start point (for fixed navigation)
-                    const startPoint = new THREE.Vector3(0, 0, 0);
-                    // End point (for fixed navigation)
-                    const endPoint = new THREE.Vector3(0, 1.5, -4);
-                    const groupID = pathfinding.getGroup('level1', startPoint);
-                    const closest = pathfinding.getClosestNode(startPoint, 'level1', groupID);
-                    const navpath = pathfinding.findPath(closest.centroid, endPoint, 'level1', groupID);
-                    if (navpath) {
-                        const pathfindingHelper = document.querySelector('[pathfinding-helper]');
-                        pathfindingHelper.setAttribute('draw-path', { path: navpath });
-                    }
-                }
-            });
-        });
-    }
-});
-
-AFRAME.registerComponent('draw-path', {
-    schema: {
-        path: { type: 'array' }
-    },
-    init: function () {
-        console.log("Draw path component initialized.");
-
-        const scene = this.el.object3D;
-        const arrowGroup = new THREE.Group();
-        scene.add(arrowGroup);
-
-        this.arrowMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-        this.arrowGeometry = new THREE.ConeGeometry(0.05, 0.1, 10);
-
-        this.update();
-    },
-    update: function () {
-        console.log("Updating path visualization.");
-
-        const navpath = this.data.path;
-        const arrowGroup = this.el.object3D;
-        arrowGroup.clear();
-
-        for (let i = 0; i < navpath.length - 1; i++) {
-            const startPoint = new THREE.Vector3(navpath[i].x, navpath[i].y, navpath[i].z);
-            const endPoint = new THREE.Vector3(navpath[i + 1].x, navpath[i + 1].y, navpath[i + 1].z);
-
-            const direction = new THREE.Vector3().subVectors(endPoint, startPoint);
-            const arrow = new THREE.Mesh(this.arrowGeometry, this.arrowMaterial);
-
-            const arrowLength = direction.length() - 0.2; // Adjust the length of the arrow
-            arrow.position.copy(startPoint);
-            arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.clone().normalize());
-            arrow.scale.set(1, arrowLength, 1);
-
-            arrowGroup.add(arrow);
-        }
-    }
-});
-
-AFRAME.registerComponent('move-camera', {
-    init: function () {
-        console.log("Move camera component initialized.");
-
-        // Track initial camera position
-        let initialCameraPosition = null;
-
-        // Listen for device orientation changes
-        window.addEventListener('deviceorientation', (event) => {
-            if (initialCameraPosition === null) {
-                initialCameraPosition = new THREE.Vector3();
-                initialCameraPosition.copy(this.el.sceneEl.camera.el.object3D.position);
-            }
-
-            // Calculate camera movement
-            const dx = event.gamma / 90;
-            const dy = event.beta / 90;
-            const dz = event.alpha / 90;
-
-            // Update camera position
-            const cameraPosition = new THREE.Vector3(
-                initialCameraPosition.x + dx,
-                initialCameraPosition.y + dy,
-                initialCameraPosition.z + dz
-            );
-            this.el.sceneEl.camera.el.setAttribute('position', cameraPosition);
-            console.log("Camera position updated:", cameraPosition);
-        });
-    }
-});
-</script>
+<script src="script.js"></script>
    
 </body>
 </html>
