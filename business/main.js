@@ -1,6 +1,21 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { Pathfinding, PathfindingHelper } from 'three-pathfinding';
+import { ARButton } from 'three/examples/jsm/webxr/ARButton';
+
+// ARモードに移行する関数
+function enterARMode() {
+    // ボタンをクリックしてもページがリロードされないようにする
+    event.preventDefault();
+    // ARモードに移行する
+    document.querySelector('a-scene').enterAR();
+}
+
+// ボタンを表示する関数
+function showARButton() {
+    // ボタンを表示する
+    document.getElementById('arButton').style.display = 'block';
+}
 
 // SCENE
 const scene = new THREE.Scene();
@@ -57,22 +72,17 @@ function onWindowResize() {
 }
 window.addEventListener('resize', onWindowResize);
 
-// AGENT
-const agentHeight = 1.0;
-const agentRadius = 0.25;
-const agent = new THREE.Mesh(new THREE.CylinderGeometry(agentRadius, agentRadius, agentHeight), new THREE.MeshPhongMaterial({ color: 'green' }));
-agent.position.y = agentHeight / 2;
-const agentGroup = new THREE.Group();
-agentGroup.add(agent);
-agentGroup.position.z = -2;
-agentGroup.position.x = 5;
-agentGroup.position.y = 1;
-scene.add(agentGroup);
+// AR BUTTON
+document.body.appendChild(ARButton.createButton(renderer));
+// ボタンを表示する
+showARButton();
 
 // LOAD LEVEL
 const loader = new GLTFLoader();
-loader.load('./dist/SampleRoom.gltf', function (gltf) {
-    scene.add(gltf.scene);
+loader.load('./gltf/HospitalModelAddRooms.gltf', function (gltf) {
+    // モデルを読み込んだ後に表示する
+    const modelContainer = document.getElementById('modelContainer');
+    modelContainer.appendChild(gltf.scene);
 });
 
 // INITIALIZE THREE-PATHFINDING
@@ -84,7 +94,7 @@ const SPEED = 5;
 let navmesh;
 let groupID;
 let navpath;
-loader.load('./dist/NavMesh.gltf', function (gltf) {
+loader.load('./gltf/HospitalModelAddRooms.NavMeshgltf.gltf', function (gltf) {
     scene.add(gltf.scene);
     gltf.scene.traverse((node) => {
         if (!navmesh && node.isObject3D && node.children && node.children.length > 0) {
