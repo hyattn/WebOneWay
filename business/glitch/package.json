@@ -1,5 +1,5 @@
 {
-  "name": "business",
+  "name": "glitch",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "vite": "^5.1.4"
+    "vite": "^5.1.6"
   },
   "dependencies": {
     "three": "^0.162.0",

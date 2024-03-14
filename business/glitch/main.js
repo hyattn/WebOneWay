@@ -32,12 +32,12 @@ let targetPosition;
 
 // LOAD LEVEL
 const loader = new GLTFLoader();
-loader.load('/public/gltf/SimpleRoom.gltf', function (gltf) {
+loader.load('./public/gltf//SimpleRoom.gltf', function (gltf) {
     scene.add(gltf.scene);
 });
 
 // LOAD NAVMESH GLTF FILE
-loader.load('/public/gltf/NavMeshSimple.gltf', function (gltf) {
+loader.load('./public/gltf/NavMeshSimple.gltf', function (gltf) {
     gltf.scene.traverse((node) => {
         if (node.isMesh && node.geometry instanceof THREE.BufferGeometry) {
             navmesh = node;
