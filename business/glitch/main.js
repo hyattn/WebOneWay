@@ -25,84 +25,64 @@ scene.add(agentGroup);
 // INITIALIZE THREE-PATHFINDING
 const pathfinding = new Pathfinding();
 const pathfindinghelper = new PathfindingHelper();
-scene.add(pathfindinghelper);
 const ZONE = 'level1';
 let navmesh;
-let targetPosition;
+let targetPosition = new THREE.Vector3();
 
-// LOAD LEVEL
-const loader = new GLTFLoader();
-loader.load('./public/gltf//SimpleRoom.gltf', function (gltf) {
-    scene.add(gltf.scene);
-});
+// LOAD LEVEL and NAVMESH GLTF FILE
+async function loadModels() {
+    const loader = new GLTFLoader();
+    const roomGltf = await new Promise((resolve, reject) => {
+        loader.load('./public/gltf/SimpleRoom.gltf', resolve, undefined, reject);
+    });
+    scene.add(roomGltf.scene);
 
-// LOAD NAVMESH GLTF FILE
-loader.load('./public/gltf/NavMeshSimple.gltf', function (gltf) {
-    gltf.scene.traverse((node) => {
+    const navmeshGltf = await new Promise((resolve, reject) => {
+        loader.load('./public/gltf/NavMeshSimple.gltf', resolve, undefined, reject);
+    });
+    navmeshGltf.scene.traverse((node) => {
         if (node.isMesh && node.geometry instanceof THREE.BufferGeometry) {
             navmesh = node;
-            console.log(navmesh); // ①
             pathfinding.setZoneData(ZONE, Pathfinding.createZone(navmesh.geometry));
-            
-            // Now that navmesh is defined, you can call any function dependent on it
-            // For example, you can call a function to initialize pathfinding:
-            initializePathfinding();
-          
-            console.log(targetPosition);
-            updatePath(camera.position,targetPosition);
+            initializePathfinding(); // Initialize pathfinding after navmesh is loaded
+            updatePath(camera.position, targetPosition, navmesh); // Update path when navmesh is loaded
         }
-    });
-});
-
-
-// Function to initialize pathfinding after navmesh is loaded
-function initializePathfinding() {
-    pathfinding = new Pathfinding();
-    pathfindinghelper = new PathfindingHelper();
-    scene.add(pathfindinghelper);
-    const ZONE = 'level1';
-    const SPEED = 5;
-    pathfinding.setZoneData(ZONE, Pathfinding.createZone(navmesh.geometry));
-
-    // Event listener for dropdown change
-    document.getElementById('targetDropdown').addEventListener('change', function(event) {
-        const selectedValue = event.target.value;
-        
-
-        // Set target position based on the selected option
-        switch(selectedValue) {
-            case 'Kitchen':
-                targetPosition = new THREE.Vector3(-0.5, 0.2, 3.7);
-                break;
-            case 'LivingRoom':
-                targetPosition = new THREE.Vector3(9.6, 0.2, 0.28);
-                break;
-            case 'WalkWay':
-                targetPosition = new THREE.Vector3(-9.4, 0.2, 0.2);
-                break;
-            default:
-                targetPosition = new THREE.Vector3(0, 0, 0);
-        }
-      
-      return targetPosition;
     });
 }
 
-
-// Fixed Destination Point
-const fixedDestination = new THREE.Vector3(2, 0, 3);
+// Function to initialize pathfinding after navmesh is loaded
+function initializePathfinding() {
+    // Event listener for dropdown change
+    document.getElementById('targetDropdown').addEventListener('change', function(event) {
+        const selectedValue = event.target.value;
+        switch(selectedValue) {
+            case 'Kitchen':
+                targetPosition.set(-0.5, 0.2, 3.7);
+                break;
+            case 'LivingRoom':
+                targetPosition.set(9.6, 0.2, 0.28);
+                break;
+            case 'WalkWay':
+                targetPosition.set(-9.4, 0.2, 0.2);
+                break;
+            default:
+                targetPosition.set(0, 0, 0);
+        }
+        updatePath(camera.position, targetPosition, navmesh); // Update path when target position changes
+    });
+}
 
 // Function to update path visualization
-function updatePath(start, end) {
-    const groupID = pathfinding.getGroup(ZONE, start);
+function updatePath(start, end, navmesh) {
     if (!navmesh) {
         console.error('Navmesh geometry is not loaded.');
         return;
     }
 
+    const groupID = pathfinding.getGroup(ZONE, start);
     const closestStart = pathfinding.getClosestNode(start, ZONE, groupID);
     const closestEnd = pathfinding.getClosestNode(end, ZONE, groupID);
-    
+
     // Perform pathfinding using the navmesh geometry
     const navpath = pathfinding.findPath(closestStart.centroid, closestEnd.centroid, ZONE, groupID);
 
@@ -117,40 +97,48 @@ function updatePath(start, end) {
 // Function to move the agent (camera) and update path
 function moveAgentAndPath() {
     // Move agent (camera) to fixed destination
-    camera.position.copy(fixedDestination);
+    camera.position.copy(targetPosition);
     camera.lookAt(0, 0, 0);
 
     // Update path with agent's new position
-    updatePath(camera.position, fixedDestination);
+    updatePath(camera.position, targetPosition, navmesh);
 }
 
-// Initiate AR Button
-document.body.appendChild(ARButton.createButton(renderer));
+// Initiate AR Button and XR Session
 
-// Initiate XR Session
-function initXR() {
-    navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-        if (supported) {
-            navigator.xr.requestSession('immersive-ar').then(onSessionStarted);
+async function initAR() {
+    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+    if (supported) {
+        try {
+            const session = await navigator.xr.requestSession('immersive-ar');
+            renderer.xr.setSession(session);
+            let referenceSpace;
+            try {
+                // Try to request local-floor reference space
+                referenceSpace = await session.requestReferenceSpace('local-floor');
+            } catch {
+                // If local-floor is not supported, try requesting local
+                referenceSpace = await session.requestReferenceSpace('local');
+            }
+            session.requestAnimationFrame((timestamp, frame) => {
+                renderer.render(scene, camera);
+                moveAgentAndPath(); // Move agent and update path initially
+            });
+        } catch (error) {
+            console.error('Failed to start XR session:', error.message);
+            // Handle the error gracefully, e.g., fallback to non-AR mode
         }
-    });
+    } else {
+        console.error('Immersive AR is not supported.');
+        // Handle the case where immersive AR is not supported, e.g., fallback to non-AR mode
+    }
 }
 
-// Function to start XR session
-function onSessionStarted(session) {
-    renderer.xr.setSession(session);
-    session.requestReferenceSpace('local').then((referenceSpace) => {
-        session.requestAnimationFrame((timestamp, frame) => {
-            renderer.render(scene, camera);
-            moveAgentAndPath(); // Move agent and update path initially
-        });
-    }).catch((error) => {
-        console.error('Failed to start XR session:', error.message);
-        // Handle the error gracefully, e.g., fallback to non-AR mode
-    });
-}
 
-initXR();
+// Load models and initialize AR
+loadModels().then(initAR).catch((error) => {
+    console.error('Error loading models:', error);
+});
 
 // Event listener for window resize event
 function onWindowResize() {
