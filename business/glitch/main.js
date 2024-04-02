@@ -1,149 +1,119 @@
 import * as THREE from 'three';
-import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Pathfinding, PathfindingHelper } from 'three-pathfinding';
+import { DeviceOrientationControls } from 'three/examples/jsm/controls/DeviceOrientationControls.js';
 
-// SCENE
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa8def0);
+let scene, camera, renderer;
+let navigationArea;
+let kitchenTarget, livingRoomTarget;
 
-// CAMERA (AR Mode)
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+let controls;
 
-// RENDERER
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+init();
 
-// AGENT (Camera)
-const agentHeight = 1.0;
-const agentRadius = 0.25;
-const agentGroup = new THREE.Group();
-agentGroup.position.set(0, agentHeight / 2, 0);
-scene.add(agentGroup);
+async function init() {
+    scene = new THREE.Scene();
 
-// INITIALIZE THREE-PATHFINDING
-const pathfinding = new Pathfinding();
-const pathfindinghelper = new PathfindingHelper();
-const ZONE = 'level1';
-let navmesh;
-let targetPosition = new THREE.Vector3();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-// LOAD LEVEL and NAVMESH GLTF FILE
-async function loadModels() {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const ambient = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+    ambient.position.set(0.5, 1, 0.25);
+    scene.add(ambient);
+
+    // Load GLTF models for navigation area and navmesh
     const loader = new GLTFLoader();
-    const roomGltf = await new Promise((resolve, reject) => {
-        loader.load('./public/gltf/SimpleRoom.gltf', resolve, undefined, reject);
+    loader.load("/textures/bricks/SimpleRoom.gltf", function (gltf) {
+        navigationArea = gltf.scene;
+        scene.add(navigationArea);
     });
-    scene.add(roomGltf.scene);
 
-    const navmeshGltf = await new Promise((resolve, reject) => {
-        loader.load('./public/gltf/NavMeshSimple.gltf', resolve, undefined, reject);
-    });
-    navmeshGltf.scene.traverse((node) => {
-        if (node.isMesh && node.geometry instanceof THREE.BufferGeometry) {
-            navmesh = node;
-            pathfinding.setZoneData(ZONE, Pathfinding.createZone(navmesh.geometry));
-            initializePathfinding(); // Initialize pathfinding after navmesh is loaded
-            updatePath(camera.position, targetPosition, navmesh); // Update path when navmesh is loaded
-        }
-    });
-}
-
-// Function to initialize pathfinding after navmesh is loaded
-function initializePathfinding() {
-    // Event listener for dropdown change
-    document.getElementById('targetDropdown').addEventListener('change', function(event) {
-        const selectedValue = event.target.value;
-        switch(selectedValue) {
-            case 'Kitchen':
-                targetPosition.set(-0.5, 0.2, 3.7);
-                break;
-            case 'LivingRoom':
-                targetPosition.set(9.6, 0.2, 0.28);
-                break;
-            case 'WalkWay':
-                targetPosition.set(-9.4, 0.2, 0.2);
-                break;
-            default:
-                targetPosition.set(0, 0, 0);
-        }
-        updatePath(camera.position, targetPosition, navmesh); // Update path when target position changes
-    });
-}
-
-// Function to update path visualization
-function updatePath(start, end, navmesh) {
-    if (!navmesh) {
-        console.error('Navmesh geometry is not loaded.');
-        return;
-    }
-
-    const groupID = pathfinding.getGroup(ZONE, start);
-    const closestStart = pathfinding.getClosestNode(start, ZONE, groupID);
-    const closestEnd = pathfinding.getClosestNode(end, ZONE, groupID);
-
-    // Perform pathfinding using the navmesh geometry
-    const navpath = pathfinding.findPath(closestStart.centroid, closestEnd.centroid, ZONE, groupID);
-
-    if (navpath) {
-        pathfindinghelper.reset();
-        pathfindinghelper.setPlayerPosition(start);
-        pathfindinghelper.setTargetPosition(end);
-        pathfindinghelper.setPath(navpath);
-    }
-}
-
-// Function to move the agent (camera) and update path
-function moveAgentAndPath() {
-    // Move agent (camera) to fixed destination
-    camera.position.copy(targetPosition);
-    camera.lookAt(0, 0, 0);
-
-    // Update path with agent's new position
-    updatePath(camera.position, targetPosition, navmesh);
-}
-
-// Initiate AR Button and XR Session
-
-async function initAR() {
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    if (supported) {
-        try {
-            const session = await navigator.xr.requestSession('immersive-ar');
-            renderer.xr.setSession(session);
-            let referenceSpace;
-            try {
-                // Try to request local-floor reference space
-                referenceSpace = await session.requestReferenceSpace('local-floor');
-            } catch {
-                // If local-floor is not supported, try requesting local
-                referenceSpace = await session.requestReferenceSpace('local');
+    // Load navmesh GLTF model
+    loader.load("/textures/bricks/NavMeshSimple.gltf", function (gltf) {
+        navigationArea.children.forEach(child => {
+            if (child.isMesh) {
+                child.geometry.dispose();
+                child.material.dispose();
+                navigationArea.remove(child);
             }
-            session.requestAnimationFrame((timestamp, frame) => {
-                renderer.render(scene, camera);
-                moveAgentAndPath(); // Move agent and update path initially
-            });
-        } catch (error) {
-            console.error('Failed to start XR session:', error.message);
-            // Handle the error gracefully, e.g., fallback to non-AR mode
-        }
-    } else {
-        console.error('Immersive AR is not supported.');
-        // Handle the case where immersive AR is not supported, e.g., fallback to non-AR mode
-    }
+        });
+        const navmesh = gltf.scene;
+        navigationArea.add(navmesh);
+    });
+
+    // Initialize buttons for kitchen and living room
+    kitchenTarget = document.getElementById("kitchenTarget");
+    livingRoomTarget = document.getElementById("livingRoomTarget");
+
+    // Add event listeners to buttons
+    kitchenTarget.addEventListener("click", () => {
+        startNavigation(new THREE.Vector3(-2.8, 0, 2));
+    });
+
+    livingRoomTarget.addEventListener("click", () => {
+        startNavigation(new THREE.Vector3(0.7, 0, 2.5));
+    });
+
+    // Initialize DeviceOrientationControls
+    controls = new DeviceOrientationControls(camera);
 }
 
+function startNavigation(targetPosition) {
+    if (!navigationArea) return;
 
-// Load models and initialize AR
-loadModels().then(initAR).catch((error) => {
-    console.error('Error loading models:', error);
-});
+    // Set the navigation area's position to the target position
+    navigationArea.position.copy(targetPosition);
+    // Make navigation area visible
+    navigationArea.visible = true;
 
-// Event listener for window resize event
-function onWindowResize() {
+    // Reset camera position and rotation
+    camera.position.set(0, 0, 0);
+    camera.rotation.set(0, 0, 0);
+
+    // Event listener for device orientation change
+    window.addEventListener('deviceorientation', onDeviceOrientationChange, false);
+}
+
+function onDeviceOrientationChange(event) {
+    if (!navigationArea) return;
+
+    // Calculate rotation change
+    const alpha = event.alpha;
+    const beta = event.beta;
+    const gamma = event.gamma;
+
+    // Adjust navigation based on rotation change
+    const movementSpeed = 0.01;
+    const rotationSpeed = 0.02;
+
+    // Move navigation area based on device orientation
+    navigationArea.position.x -= gamma * movementSpeed;
+    navigationArea.position.z -= beta * movementSpeed;
+
+    // Rotate navigation area based on device orientation
+    navigationArea.rotation.y -= alpha * rotationSpeed;
+
+    // Render scene
+    renderer.render(scene, camera);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (controls) {
+        controls.update();
+    }
+
+    renderer.render(scene, camera);
+}
+
+animate();
+
+window.addEventListener('resize', function () {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-}
-window.addEventListener('resize', onWindowResize);
+});
